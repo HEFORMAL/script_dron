@@ -56,25 +56,20 @@ def get_gps(control):
 SNAKE_START_LAT = 454276736
 SNAKE_START_LON = 396638176
 SNAKE_RIGHT_LON = 396587360
-SNAKE_END_LAT = 454327072
+SNAKE_END_LAT = 454412384  # ← изменено
+SNAKE_END_LON = 396585696
 SNAKE_LAT_STEP = 3000
-RECHARGE_EVERY = 7  # перезарядка каждые N достижений левого lon
 
 
 def build_snake_waypoints(
-    home_lat, home_lon, alt_cm, speed, resume_lat=None, resume_lon=None
+    home_lat,
+    home_lon,
+    alt_cm,
+    speed,
+    resume_lat=None,
+    resume_lon=None,
+    recharge_every=7,
 ):
-    """
-    Строит сегмент маршрута змейки.
-    Каждая итерация цикла:
-      1) Дрон на (lat, LEFT_LON)
-      2) Летит до (lat, RIGHT_LON)
-      3) Летит до (lat+3000, RIGHT_LON)
-      4) Летит до (lat+3000, LEFT_LON)
-      5) Летит до (lat+6000, LEFT_LON)
-    После RECHARGE_EVERY достижений левого lon — возврат на базу.
-    Возвращает (waypoints, next_lat, next_lon, finished)
-    """
     START_LON = SNAKE_START_LON
     RIGHT_LON = SNAKE_RIGHT_LON
     END_LAT = SNAKE_END_LAT
@@ -91,71 +86,72 @@ def build_snake_waypoints(
     lat = resume_lat
     on_left = resume_lon == START_LON
 
-    # WP1: база (дрон стартует отсюда)
     wps.append([wp_num, 1, home_lat, home_lon, alt_cm, speed, 0, 0, 0])
     wp_num += 1
 
-    # WP2: летим к сохранённой точке (для первого сегмента это START, для остальных — resume)
     wps.append([wp_num, 1, resume_lat, resume_lon, alt_cm, speed, 0, 0, 0])
     wp_num += 1
 
-    # Стартовая точка на левом lon не считается как "полоса"
-    # left_hits считаем только когда ДОЛЕТАЕМ до левого, не стартуем с него
-
     while lat <= END_LAT:
         if on_left:
-            # 2) летим до правого lon
             wps.append([wp_num, 1, lat, RIGHT_LON, alt_cm, speed, 0, 0, 0])
             wp_num += 1
 
-            # 3) сдвиг +3000 на правом конце
             lat += LAT_STEP
             wps.append([wp_num, 1, lat, RIGHT_LON, alt_cm, speed, 0, 0, 0])
             wp_num += 1
 
             if lat > END_LAT:
+                wps.append(
+                    [wp_num, 1, SNAKE_END_LAT, SNAKE_END_LON, alt_cm, speed, 0, 0, 0]
+                )
+                wp_num += 1
                 wps.append([wp_num, 1, home_lat, home_lon, alt_cm, speed, 0, 0, 0])
                 wp_num += 1
                 wps.append([wp_num, 1, home_lat, home_lon, 0, 0, 0, 0, 165])
                 return wps, lat, RIGHT_LON, True
 
-            # 4) летим до левого lon
             wps.append([wp_num, 1, lat, START_LON, alt_cm, speed, 0, 0, 0])
             wp_num += 1
             left_hits += 1
 
-            if left_hits >= RECHARGE_EVERY:
-                # сохраняем: следующий шаг — сдвиг +3000 на левом конце
+            if left_hits >= recharge_every:
                 wps.append([wp_num, 1, home_lat, home_lon, alt_cm, speed, 0, 0, 0])
                 wp_num += 1
                 wps.append([wp_num, 1, home_lat, home_lon, 0, 0, 0, 0, 165])
                 return wps, lat + LAT_STEP, START_LON, False
 
-            # 5) сдвиг +3000 на левом конце
             lat += LAT_STEP
             wps.append([wp_num, 1, lat, START_LON, alt_cm, speed, 0, 0, 0])
             wp_num += 1
             left_hits += 1
 
             if lat > END_LAT:
+                wps.append(
+                    [wp_num, 1, SNAKE_END_LAT, SNAKE_END_LON, alt_cm, speed, 0, 0, 0]
+                )
+                wp_num += 1
                 wps.append([wp_num, 1, home_lat, home_lon, alt_cm, speed, 0, 0, 0])
                 wp_num += 1
                 wps.append([wp_num, 1, home_lat, home_lon, 0, 0, 0, 0, 165])
                 return wps, lat, START_LON, True
 
-            if left_hits >= RECHARGE_EVERY:
+            if left_hits >= recharge_every:
                 wps.append([wp_num, 1, home_lat, home_lon, alt_cm, speed, 0, 0, 0])
                 wp_num += 1
                 wps.append([wp_num, 1, home_lat, home_lon, 0, 0, 0, 0, 165])
                 return wps, lat, START_LON, False
 
         else:
-            # Возобновляем с правого — сдвиг, потом влево
             lat += LAT_STEP
             wps.append([wp_num, 1, lat, RIGHT_LON, alt_cm, speed, 0, 0, 0])
             wp_num += 1
 
             if lat > END_LAT:
+                wps.append(
+                    [wp_num, 1, SNAKE_END_LAT, SNAKE_END_LON, alt_cm, speed, 0, 0, 0]
+                )
+                wp_num += 1
                 wps.append([wp_num, 1, home_lat, home_lon, alt_cm, speed, 0, 0, 0])
                 wp_num += 1
                 wps.append([wp_num, 1, home_lat, home_lon, 0, 0, 0, 0, 165])
@@ -166,12 +162,14 @@ def build_snake_waypoints(
             left_hits += 1
             on_left = True
 
-            if left_hits >= RECHARGE_EVERY:
+            if left_hits >= recharge_every:
                 wps.append([wp_num, 1, home_lat, home_lon, alt_cm, speed, 0, 0, 0])
                 wp_num += 1
                 wps.append([wp_num, 1, home_lat, home_lon, 0, 0, 0, 0, 165])
                 return wps, lat + LAT_STEP, START_LON, False
 
+    wps.append([wp_num, 1, SNAKE_END_LAT, SNAKE_END_LON, alt_cm, speed, 0, 0, 0])
+    wp_num += 1
     wps.append([wp_num, 1, home_lat, home_lon, alt_cm, speed, 0, 0, 0])
     wp_num += 1
     wps.append([wp_num, 1, home_lat, home_lon, 0, 0, 0, 0, 165])
@@ -179,7 +177,6 @@ def build_snake_waypoints(
 
 
 def send_waypoints_in_batches(control, waypoints):
-    """INAV поддерживает до 120 WP. Отправляем все."""
     print(f"\nЗАГРУЗКА МАРШРУТА ({len(waypoints)} точек):")
     for wp in waypoints:
         binary_data = struct.pack("<BBIIIHHHB", *wp)
@@ -194,6 +191,9 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--inav_host", type=str, default="127.0.0.1")
     parser.add_argument("--inav_port", type=int, default=5762)
+    parser.add_argument(
+        "--recharge_every", type=int, default=7, help="Количество полос до посадки"
+    )
     args = parser.parse_args()
 
     tcp_transmitter = TCPTransmitter((args.inav_host, args.inav_port))
@@ -205,7 +205,6 @@ def main():
     print("СТАРТ МИССИИ — РЕЖИМ ЗМЕЙКИ")
     print("=" * 60)
 
-    # ─── ФИЗИЧЕСКИЙ НОЛЬ ──────────────────────────────────────
     start_x, start_y = None, None
     for _ in range(10):
         start_x, start_y = get_physics_xy(sim_client)
@@ -217,7 +216,6 @@ def main():
         print("  Ошибка получения физики. Выход.")
         return
 
-    # ─── GPS БАЗЫ ─────────────────────────────────────────────
     print("\nСЧИТЫВАНИЕ КООРДИНАТ БАЗЫ...")
     home_lat, home_lon = None, None
     for attempt in range(10):
@@ -235,16 +233,15 @@ def main():
 
     ALT_FLY_CM = 5000
     SPEED = 2000
-    resume_lat = None  # None = старт с начала
+    resume_lat = None
     resume_lon = None
     segment_num = 1
 
     print(f"\nЗМЕЙКА:")
-    print(f"  Перезарядка каждые {RECHARGE_EVERY} полос")
-    print(f"  Диапазон lat: {SNAKE_START_LAT} → {SNAKE_END_LAT} (шаг {SNAKE_LAT_STEP})")
-    print(f"  Диапазон lon: {SNAKE_START_LON} ↔ {SNAKE_RIGHT_LON}")
+    print(f"  Перезарядка каждые {args.recharge_every} полос")
+    print(f"  Диапазон lat: {SNAKE_START_LAT} → {SNAKE_END_LAT}")
+    print(f"  Конечная точка: lat={SNAKE_END_LAT}, lon={SNAKE_END_LON}")
 
-    # ─── ГЛАВНЫЙ ЦИКЛ СЕГМЕНТОВ ───────────────────────────────
     while True:
         print(f"\n{'='*60}")
         if segment_num == 1:
@@ -255,25 +252,34 @@ def main():
             )
         print(f"{'='*60}")
 
+        # DISARM перед загрузкой
+        control.send_RAW_RC([1500, 1500, 1000, 1500, 1000, 1000, 1000])
+        control.receive_msg()
+        time.sleep(1.0)
+
         waypoints, next_lat, next_lon, finished = build_snake_waypoints(
-            home_lat, home_lon, ALT_FLY_CM, SPEED, resume_lat, resume_lon
+            home_lat,
+            home_lon,
+            ALT_FLY_CM,
+            SPEED,
+            resume_lat,
+            resume_lon,
+            args.recharge_every,
         )
 
         print(f"  Точек в сегменте: {len(waypoints)}")
         send_waypoints_in_batches(control, waypoints)
 
-        # ─── ИНИЦИАЛИЗАЦИЯ ────────────────────────────────────
         print("\nИНИЦИАЛИЗАЦИЯ...")
         control.send_RAW_RC([1500, 1500, 1000, 1500, 1000, 1000, 1000])
         control.receive_msg()
-        time.sleep(0.5)
+        time.sleep(1.0)
 
         control.send_RAW_RC([1500, 1500, 1000, 1500, 2000, 1000, 1000])
         control.receive_msg()
         time.sleep(0.5)
         print("  Автопилот активирован")
 
-        # ─── ВЗЛЁТ ────────────────────────────────────────────
         print("\nВЗЛЁТ (цель: 50м)...")
         control.send_RAW_RC([1500, 1500, 1900, 1500, 2000, 1000, 1000])
         control.receive_msg()
@@ -286,9 +292,6 @@ def main():
                 if altitude >= 45.0:
                     print(f"\n  Высота {altitude:.1f} м достигнута")
                     break
-                elif altitude >= 45.0:  # оставлено как в оригинале
-                    control.send_RAW_RC([1500, 1500, 1620, 1500, 2000, 1000, 1000])
-                    control.receive_msg()
                 elif altitude >= 20.0:
                     control.send_RAW_RC([1500, 1500, 1750, 1500, 2000, 1000, 1000])
                     control.receive_msg()
@@ -299,14 +302,12 @@ def main():
         control.send_RAW_RC([1500, 1500, 1500, 1500, 2000, 1000, 1000])
         control.receive_msg()
 
-        # ─── ЗАПУСК МИССИИ ────────────────────────────────────
         print("\nЗАПУСК МИССИИ...")
         control.send_RAW_RC([1500, 1500, 1500, 1500, 2000, 1000, 2000])
         control.receive_msg()
         mission_start = time.time()
         print("  Миссия запущена!")
 
-        # ─── МОНИТОРИНГ И ПОСАДКА ─────────────────────────────
         precise_landing = False
         mission_complete = False
 
@@ -316,7 +317,6 @@ def main():
             elapsed = time.time() - mission_start
             altitude = get_altitude(sim_client)
 
-            # ФАЗА 1: полёт по маршруту
             if not precise_landing:
                 if altitude is not None and altitude < 15.0 and elapsed > 20:
                     print(f"\n\nПЕРЕХВАТ: начинаю точную посадку... ({elapsed:.0f}с)")
@@ -330,7 +330,6 @@ def main():
                     secs = int(elapsed % 60)
                     print(f"\r  {mins:02d}:{secs:02d} | Высота: {alt_str}", end="")
 
-            # ФАЗА 2: точная посадка
             else:
                 curr_x, curr_y = get_physics_xy(sim_client)
                 yaw = get_yaw(sim_client)
@@ -360,7 +359,7 @@ def main():
 
                 control.receive_msg()
 
-                if altitude is not None and altitude <= 0.5:
+                if altitude is not None and altitude <= 0.35:
                     total = time.time() - mission_start
                     mins, secs = int(total // 60), int(total % 60)
                     print(f"\n\n  ПРИЗЕМЛИЛСЯ! Высота: {altitude:.2f}м")
@@ -375,20 +374,17 @@ def main():
                 break
             time.sleep(0.5)
 
-        # ─── ПОСЛЕ ПОСАДКИ ────────────────────────────────────
         if finished:
             print("\n" + "=" * 60)
             print("ВСЯ ЗМЕЙКА ЗАВЕРШЕНА!")
             break
 
-        # Перезарядка — сохраняем позицию и продолжаем
         print(f"\nПЕРЕЗАРЯДКА #{segment_num}")
         print(f"  Сохранена позиция: lat={next_lat}, lon={next_lon}")
         resume_lat = next_lat
         resume_lon = next_lon
         segment_num += 1
 
-    # ─── ЗАВЕРШЕНИЕ ───────────────────────────────────────────
     print("\n" + "=" * 60)
     print("ВЫКЛЮЧЕНИЕ ДВИГАТЕЛЕЙ")
     for _ in range(5):
@@ -402,5 +398,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-
-    # надо поменять чтобы можно было самому выбирать через сколько он садится
